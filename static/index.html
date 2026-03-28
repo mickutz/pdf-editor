@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Editor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; user-select: none; }
+    header { background: #1e293b; border-bottom: 1px solid #334155; padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: #f1f5f9; }
+    header span { font-size: 0.72rem; color: #64748b; margin-left: 4px; }
+    .layout { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 57px); }
+    .sidebar { width: 296px; min-width: 296px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; }
+    .sb-section { padding: 14px 16px; border-bottom: 1px solid #2d3f55; flex-shrink: 0; }
+    .sb-section h2 { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: #64748b; margin-bottom: 10px; }
+    .upload-area { border: 2px dashed #334155; border-radius: 8px; padding: 18px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+    .upload-area:hover, .upload-area.drag-over { border-color: #6366f1; background: rgba(99,102,241,.06); }
+    .upload-area svg { margin: 0 auto 8px; display: block; color: #475569; }
+    .upload-area p { font-size: 0.78rem; color: #94a3b8; }
+    .upload-area strong { color: #6366f1; }
+    #pdf-upload { display: none; }
+    .file-badge { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 7px 11px; font-size: 0.76rem; color: #94a3b8; display: flex; align-items: center; gap: 7px; margin-top: 10px; }
+    .file-badge span { color: #e2e8f0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stab-bar { display: flex; gap: 3px; background: #0f172a; border-radius: 7px; padding: 3px; flex-shrink: 0; margin: 0 16px 0; }
+    .stab { flex: 1; padding: 6px; text-align: center; border-radius: 5px; font-size: 0.75rem; font-weight: 600; cursor: pointer; color: #64748b; transition: background .15s, color .15s; }
+    .stab.active { background: #1e293b; color: #e2e8f0; }
+    .stab-badge { display: inline-flex; align-items: center; justify-content: center; background: #6366f1; color: #fff; border-radius: 9px; font-size: 0.62rem; font-weight: 700; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+    .stab-panels { flex: 1; overflow-y: auto; }
+    .stab-panel { display: none; padding: 14px 16px; }
+    .stab-panel.active { display: block; }
+    .add-tab-bar { display: flex; gap: 3px; background: #0f172a; border-radius: 6px; padding: 3px; margin-bottom: 12px; }
+    .add-tab { flex: 1; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.74rem; font-weight: 600; cursor: pointer; color: #64748b; transition: background .15s, color .15s; }
+    .add-tab.active { background: #1e293b; color: #e2e8f0; }
+    .add-panel { display: none; }
+    .add-panel.active { display: block; }
+    label.fl { display: block; font-size: 0.73rem; color: #94a3b8; margin-bottom: 3px; margin-top: 9px; }
+    label.fl:first-child { margin-top: 0; }
+    input[type=text], input[type=number], select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 9px; color: #e2e8f0; font-size: 0.82rem; outline: none; transition: border-color .2s; }
+    input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus { border-color: #6366f1; }
+    input[type=color] { width: 34px; height: 30px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; cursor: pointer; padding: 2px; }
+    .row2 { display: flex; gap: 7px; }
+    .row2 > * { flex: 1; }
+    .color-row { display: flex; align-items: center; gap: 7px; }
+    .color-row input[type=text] { flex: 1; }
+    textarea { resize: vertical; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 8px 13px; border: none; border-radius: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; margin-top: 9px; }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #4f46e5; }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #059669; }
+    .btn-ghost { background: #0f172a; border: 1px solid #334155; color: #94a3b8; }
+    .btn-ghost:hover:not(:disabled) { background: #334155; color: #e2e8f0; }
+    .btn-danger { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.3); }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,.25); }
+    .hint { font-size: 0.7rem; color: #475569; margin-top: 5px; line-height: 1.4; }
+    .hint.hl { color: #818cf8; }
+    .sig-preview { margin-top: 7px; border: 1px solid #334155; border-radius: 6px; overflow: hidden; background: repeating-conic-gradient(#1e293b 0% 25%,#0f172a 0% 50%) 0 0/12px 12px; display: none; align-items: center; justify-content: center; min-height: 56px; }
+    .sig-preview img { max-width: 100%; max-height: 76px; display: block; }
+    .el-list { display: flex; flex-direction: column; gap: 5px; }
+    .el-empty { font-size: 0.78rem; color: #475569; text-align: center; padding: 20px 0; }
+    .el-item { background: #0f172a; border: 1px solid #334155; border-radius: 7px; overflow: hidden; transition: border-color .15s; }
+    .el-item.sel { border-color: #6366f1; }
+    .el-item-hdr { display: flex; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; }
+    .el-item-hdr:hover { background: rgba(255,255,255,.03); }
+    .el-icon { width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+    .el-icon-t { background: rgba(99,102,241,.2); color: #818cf8; }
+    .el-icon-s { background: rgba(16,185,129,.2); color: #34d399; }
+    .el-icon-sym { background: rgba(245,158,11,.2); color: #fbbf24; }
+    .el-lbl { flex: 1; font-size: 0.77rem; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .el-pg { background: #1e293b; border: 1px solid #334155; border-radius: 4px; font-size: 0.63rem; color: #64748b; padding: 1px 5px; flex-shrink: 0; }
+    .el-del { background: none; border: none; color: #475569; cursor: pointer; padding: 3px 6px; border-radius: 4px; font-size: 0.8rem; transition: background .15s, color .15s; flex-shrink: 0; }
+    .el-del:hover { background: rgba(239,68,68,.15); color: #f87171; }
+    .el-form { padding: 9px 10px 11px; border-top: 1px solid #1e293b; display: none; }
+    .el-item.sel .el-form { display: block; }
+    .edit-btns { display: flex; gap: 6px; margin-top: 8px; }
+    .edit-btns .btn { flex: 1; margin-top: 0; font-size: 0.76rem; padding: 7px; }
+    .canvas-area { flex: 1; overflow: auto; background: #080d19; display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 16px; }
+    .page-controls { display: flex; align-items: center; gap: 9px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 5px 13px; font-size: 0.8rem; color: #94a3b8; flex-shrink: 0; }
+    .page-controls button { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px 7px; border-radius: 4px; font-size: 1rem; line-height: 1; transition: background .15s, color .15s; }
+    .page-controls button:hover:not(:disabled) { background: #334155; color: #e2e8f0; }
+    .page-controls button:disabled { opacity: .3; cursor: not-allowed; }
+    #page-label { color: #e2e8f0; font-weight: 600; }
+    .canvas-wrapper { position: relative; display: inline-block; box-shadow: 0 8px 32px rgba(0,0,0,.6); flex-shrink: 0; }
+    #pdf-canvas { display: block; cursor: crosshair; }
+    #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .place-marker { position: absolute; pointer-events: none; border: 2px dashed rgba(99,102,241,.7); background: rgba(99,102,241,.08); border-radius: 3px; }
+    .el-box { position: absolute; pointer-events: auto; border: 2px solid transparent; border-radius: 3px; cursor: grab; transition: border-color .12s, background .12s; }
+    .el-box:active { cursor: grabbing; }
+    .el-box.tb { border-color: rgba(99,102,241,.55); background: rgba(99,102,241,.07); }
+    .el-box.sb { border-color: rgba(16,185,129,.55); background: rgba(16,185,129,.07); }
+    .el-box.symb { border-color: rgba(245,158,11,.55); background: rgba(245,158,11,.07); }
+    .el-box.sel.tb { border-color: #6366f1; background: rgba(99,102,241,.14); box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
+    .el-box.sel.sb { border-color: #10b981; background: rgba(16,185,129,.14); box-shadow: 0 0 0 3px rgba(16,185,129,.2); }
+    .el-box.sel.symb { border-color: #f59e0b; background: rgba(245,158,11,.14); box-shadow: 0 0 0 3px rgba(245,158,11,.2); }
+    .box-toolbar { position: absolute; top: -28px; right: 0; display: flex; gap: 3px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+    .el-box:hover .box-toolbar, .el-box.sel .box-toolbar { opacity: 1; pointer-events: auto; }
+    .box-btn { width: 22px; height: 22px; border-radius: 4px; border: none; display: flex; align-items: center; justify-content: center; font-size: 0.68rem; cursor: pointer; font-weight: 700; }
+    .box-btn-del { background: #ef4444; color: #fff; }
+    .box-btn-del:hover { background: #dc2626; }
+    .box-btn-edit { background: #6366f1; color: #fff; }
+    .box-btn-edit:hover { background: #4f46e5; }
+    .resize-h { position: absolute; bottom: -5px; right: -5px; width: 12px; height: 12px; border-radius: 2px; background: #10b981; cursor: nwse-resize; opacity: 0; transition: opacity .15s; pointer-events: auto; }
+    .el-box:hover .resize-h, .el-box.sel .resize-h { opacity: 1; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #334155; flex: 1; min-height: 300px; }
+    .empty-state p { font-size: 0.88rem; }
+    .canvas-loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8,13,25,.55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 7px; z-index: 9999; }
+    .toast { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 9px 15px; font-size: 0.8rem; color: #e2e8f0; animation: toastIn .2s ease; display: flex; align-items: center; gap: 7px; }
+    .toast.success { border-color: #10b981; }
+    .toast.error { border-color: #ef4444; }
+    @keyframes toastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; display: inline-block; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>
+  <h1>PDF Editor <span>prototype</span></h1>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sb-section">
+      <h2>Document</h2>
+      <div class="upload-area" id="upload-area">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p>Drop PDF here or <strong>click to browse</strong></p>
+      </div>
+      <input type="file" id="pdf-upload" accept=".pdf" />
+      <div class="file-badge" id="file-badge" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span id="file-name">document.pdf</span>
+      </div>
+    </div>
+
+    <div id="tools-wrap" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div style="padding:10px 16px 0;flex-shrink:0">
+        <div class="stab-bar">
+          <div class="stab active" data-stab="add">Add</div>
+          <div class="stab" data-stab="elements">Elements <span class="stab-badge" id="el-badge">0</span></div>
+        </div>
+      </div>
+      <div class="stab-panels">
+
+        <!-- ADD PANEL -->
+        <div class="stab-panel active" id="stab-add">
+          <div class="add-tab-bar">
+            <div class="add-tab active" data-atab="text">Text</div>
+            <div class="add-tab" data-atab="sig">Signature</div>
+            <div class="add-tab" data-atab="symbol">Symbols</div>
+          </div>
+          <div class="add-panel active" id="ap-text">
+            <label class="fl">Text</label>
+            <textarea id="text-content" rows="2" placeholder="Enter text…"></textarea>
+            <div class="row2" style="margin-top:8px">
+              <div><label class="fl">Size</label><input type="number" id="font-size" value="14" min="6" max="96"/></div>
+              <div><label class="fl">Font</label>
+                <select id="font-name">
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="Helvetica-Bold">Helvetica Bold</option>
+                  <option value="Times-Roman">Times Roman</option>
+                  <option value="Times-Bold">Times Bold</option>
+                  <option value="Courier">Courier</option>
+                </select>
+              </div>
+            </div>
+            <label class="fl">Color</label>
+            <div class="color-row"><input type="color" id="fc-pick" value="#000000"/><input type="text" id="fc-hex" value="#000000"/></div>
+            <p class="hint hl" style="margin-top:6px">Click the PDF to set position</p>
+            <button class="btn btn-primary" id="btn-add-text" disabled>+ Add Text</button>
+          </div>
+          <div class="add-panel" id="ap-sig">
+            <input type="file" id="sig-upload" accept="image/*" style="display:none"/>
+            <button class="btn btn-ghost" id="btn-sig-browse" style="margin-top:0">Choose Signature Image</button>
+            <div class="sig-preview" id="sig-preview"><img id="sig-img" src="" alt=""/></div>
+            <div class="row2" style="margin-top:8px">
+              <div><label class="fl">Width (pt)</label><input type="number" id="sig-width" value="150" min="20" max="500"/></div>
+              <div><label class="fl">Height (pt)</label><input type="number" id="sig-height" value="75" min="10" max="300"/></div>
+            </div>
+            <p class="hint hl" style="margin-top:6px">Click the PDF to set position</p>
+            <button class="btn btn-primary" id="btn-add-sig" disabled>+ Add Signature</button>
+          </div>
+          <div class="add-panel" id="ap-symbol">
+            <label class="fl">Choose Symbol</label>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-ghost" id="btn-sym-tick" style="flex:1;font-size:24px;padding:12px">✓</button>
+              <button class="btn btn-ghost" id="btn-sym-cross" style="flex:1;font-size:24px;padding:12px">✕</button>
+            </div>
+            <div class="row2" style="margin-top:12px">
+              <div><label class="fl">Size (pt)</label><input type="number" id="sym-size" value="24" min="10" max="96"/></div>
+              <div><label class="fl">Color</label><input type="color" id="sym-color" value="#000000"/></div>
+            </div>
+            <p class="hint hl" style="margin-top:6px">Click the PDF to set position</p>
+            <button class="btn btn-primary" id="btn-add-symbol" disabled>+ Add Symbol</button>
+          </div>
+        </div>
+
+        <!-- ELEMENTS PANEL -->
+        <div class="stab-panel" id="stab-elements">
+          <div id="el-list" class="el-list"><p class="el-empty">No elements added yet</p></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="sb-section" id="dl-section" style="display:none">
+      <button class="btn btn-success" id="btn-download">&#8595; Download PDF</button>
+    </div>
+  </aside>
+
+  <main class="canvas-area">
+    <div class="empty-state" id="empty-state">
+      <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <p style="color:#475569">Upload a PDF to get started</p>
+    </div>
+    <div id="pdf-viewer" style="display:none;flex-direction:column;align-items:center;gap:16px">
+      <div class="page-controls">
+        <button id="btn-prev" disabled>&#8249;</button>
+        <span id="page-label">Page 1 / 1</span>
+        <button id="btn-next" disabled>&#8250;</button>
+      </div>
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <canvas id="pdf-canvas"></canvas>
+        <div id="overlay"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  const S = {
+    sessionId: null, filename: null, pages: [],
+    currentPage: 1, pdfDoc: null, scale: 1,
+    elements: [], selectedId: null,
+    placedX: null, placedY: null, sigFile: null,
+    activeAddTab: 'text', sidebarTab: 'add',
+    selectedSymbol: null,  // 'tick' or 'cross'
+    drag: null,  // {type:'move'|'resize', id, startX, startY, origX, origY, origW, origH, origFS, boxEl, elType}
+  };
+
+  // ── DOM ────────────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const uploadArea = $('upload-area'), pdfInput = $('pdf-upload');
+  const fileBadge = $('file-badge'), fileName = $('file-name');
+  const toolsWrap = $('tools-wrap'), dlSection = $('dl-section');
+  const emptyState = $('empty-state'), pdfViewer = $('pdf-viewer');
+  const pdfCanvas = $('pdf-canvas'), overlayEl = $('overlay');
+  const pageLabel = $('page-label'), btnPrev = $('btn-prev'), btnNext = $('btn-next');
+  const btnAddText = $('btn-add-text'), btnAddSig = $('btn-add-sig'), btnAddSymbol = $('btn-add-symbol');
+  const btnDownload = $('btn-download'), btnSigBrowse = $('btn-sig-browse');
+  const sigUpload = $('sig-upload'), sigPreview = $('sig-preview'), sigImg = $('sig-img');
+  const textContent = $('text-content');
+  const fcPick = $('fc-pick'), fcHex = $('fc-hex');
+  const elList = $('el-list'), elBadge = $('el-badge');
+  const btnSymTick = $('btn-sym-tick'), btnSymCross = $('btn-sym-cross');
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function toast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${{success:'✓',error:'✕',info:'ℹ'}[type]||'ℹ'}</span> ${msg}`;
+    $('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+
+  // ── Loading overlay ────────────────────────────────────────────────────────
+  function showLoading() {
+    let l = $('canvas-loading');
+    if (!l) { l = document.createElement('div'); l.id = 'canvas-loading'; l.className = 'canvas-loading'; l.innerHTML = '<div class="spinner"></div>'; $('canvas-wrapper').appendChild(l); }
+    l.style.display = 'flex';
+  }
+  function hideLoading() { const l = $('canvas-loading'); if (l) l.style.display = 'none'; }
+
+  // ── Sidebar tabs ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.stab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.stab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.stab-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $(`stab-${t.dataset.stab}`).classList.add('active');
+    S.sidebarTab = t.dataset.stab;
+  }));
+
+  document.querySelectorAll('.add-tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.add-tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.add-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $(`ap-${t.dataset.atab}`).classList.add('active');
+    S.activeAddTab = t.dataset.atab;
+    clearPlaceMarker();
+    S.placedX = S.placedY = null;
+  }));
+
+  function switchToElementsTab() {
+    document.querySelectorAll('.stab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.stab-panel').forEach(x => x.classList.remove('active'));
+    document.querySelector('[data-stab="elements"]').classList.add('active');
+    $('stab-elements').classList.add('active');
+    S.sidebarTab = 'elements';
+  }
+
+  // ── Color sync ─────────────────────────────────────────────────────────────
+  fcPick.addEventListener('input', () => { fcHex.value = fcPick.value; });
+  fcHex.addEventListener('input', () => { if (/^#[0-9a-fA-F]{6}$/.test(fcHex.value)) fcPick.value = fcHex.value; });
+
+  // ── Upload ─────────────────────────────────────────────────────────────────
+  uploadArea.addEventListener('click', () => pdfInput.click());
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+  uploadArea.addEventListener('drop', e => { e.preventDefault(); uploadArea.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; f && f.type==='application/pdf' ? handlePdf(f) : toast('Drop a PDF file','error'); });
+  pdfInput.addEventListener('change', () => pdfInput.files[0] && handlePdf(pdfInput.files[0]));
+
+  async function handlePdf(file) {
+    uploadArea.innerHTML = '<div class="spinner"></div>';
+    const form = new FormData(); form.append('file', file);
+    try {
+      const res = await fetch('/upload', { method:'POST', body:form });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      S.sessionId = data.session_id; S.filename = data.filename;
+      S.pages = data.pages; S.currentPage = 1; S.elements = [];
+      fileName.textContent = file.name;
+      fileBadge.style.display = 'flex';
+      toolsWrap.style.display = 'flex';
+      dlSection.style.display = 'block';
+      emptyState.style.display = 'none';
+      pdfViewer.style.display = 'flex';
+      await loadPreview();
+      updatePageNav();
+      renderElementList();
+      toast('PDF loaded', 'success');
+    } catch(e) { toast(`Upload failed: ${e.message}`, 'error'); }
+    uploadArea.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><p>Drop PDF here or <strong>click to browse</strong></p>';
+  }
+
+  // ── PDF preview ────────────────────────────────────────────────────────────
+  async function loadPreview() {
+    showLoading();
+    const res = await fetch(`/preview/${S.sessionId}`);
+    const { pdf_base64 } = await res.json();
+    const raw = atob(pdf_base64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    S.pdfDoc = await pdfjsLib.getDocument({ data: arr }).promise;
+    await renderPage(S.currentPage);
+    hideLoading();
+  }
+
+  async function renderPage(num) {
+    const page = await S.pdfDoc.getPage(num);
+    const vp = page.getViewport({ scale: 1 });
+    const maxW = window.innerWidth - 320, maxH = window.innerHeight - 130;
+    S.scale = Math.min(maxW / vp.width, maxH / vp.height, 1.8);
+    const scaled = page.getViewport({ scale: S.scale });
+    pdfCanvas.width = scaled.width; pdfCanvas.height = scaled.height;
+    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: scaled }).promise;
+    clearPlaceMarker();
+    S.placedX = S.placedY = null;
+    renderBoxes();
+  }
+
+  // ── Page navigation ────────────────────────────────────────────────────────
+  function updatePageNav() {
+    pageLabel.textContent = `Page ${S.currentPage} / ${S.pages.length}`;
+    btnPrev.disabled = S.currentPage <= 1;
+    btnNext.disabled = S.currentPage >= S.pages.length;
+  }
+  btnPrev.addEventListener('click', async () => { if (S.currentPage > 1) { S.currentPage--; showLoading(); await loadPreview(); updatePageNav(); } });
+  btnNext.addEventListener('click', async () => { if (S.currentPage < S.pages.length) { S.currentPage++; showLoading(); await loadPreview(); updatePageNav(); } });
+
+  // ── Canvas click → placement ───────────────────────────────────────────────
+  pdfCanvas.addEventListener('click', e => {
+    if (!S.sessionId || S.drag) return;
+    const r = pdfCanvas.getBoundingClientRect();
+    S.placedX = (e.clientX - r.left) / S.scale;
+    S.placedY = (e.clientY - r.top) / S.scale;
+    clearPlaceMarker();
+    drawPlaceMarker();
+    if (S.activeAddTab === 'text') btnAddText.disabled = !textContent.value.trim();
+    else if (S.activeAddTab === 'sig') btnAddSig.disabled = !S.sigFile;
+    else if (S.activeAddTab === 'symbol') btnAddSymbol.disabled = !S.selectedSymbol;
+  });
+
+  textContent.addEventListener('input', () => {
+    btnAddText.disabled = !(S.placedX !== null && textContent.value.trim());
+  });
+
+  function clearPlaceMarker() {
+    overlayEl.querySelectorAll('.place-marker').forEach(m => m.remove());
+  }
+
+  function drawPlaceMarker() {
+    const m = document.createElement('div');
+    m.className = 'place-marker';
+    if (S.activeAddTab === 'text') {
+      const fs = parseFloat($('font-size').value) || 14;
+      const txt = textContent.value || 'Text';
+      m.style.cssText = `left:${S.placedX*S.scale}px;top:${(S.placedY-fs*0.82)*S.scale}px;width:${Math.max(40,txt.length*fs*0.6*S.scale)}px;height:${fs*S.scale}px`;
+    } else if (S.activeAddTab === 'sig') {
+      const w = parseFloat($('sig-width').value)||150, h = parseFloat($('sig-height').value)||75;
+      m.style.cssText = `left:${S.placedX*S.scale}px;top:${S.placedY*S.scale}px;width:${w*S.scale}px;height:${h*S.scale}px`;
+    } else if (S.activeAddTab === 'symbol') {
+      const sz = parseFloat($('sym-size').value) || 24;
+      m.style.cssText = `left:${S.placedX*S.scale}px;top:${(S.placedY-sz*0.82)*S.scale}px;width:${sz*S.scale}px;height:${sz*S.scale}px`;
+      m.textContent = S.selectedSymbol === 'tick' ? '✓' : '✕';
+      m.style.fontSize = sz*S.scale + 'px';
+      m.style.display = 'flex';
+      m.style.alignItems = 'center';
+      m.style.justifyContent = 'center';
+    }
+    overlayEl.appendChild(m);
+  }
+
+  // ── Element boxes on canvas ────────────────────────────────────────────────
+  function boxGeom(el) {
+    if (el.type === 'text') {
+      const fs = el.font_size || 14;
+      return { left: el.x * S.scale, top: (el.y - fs * 0.82) * S.scale,
+             width: Math.max(40, el.text.length * fs * 0.6 * S.scale), height: fs * S.scale };
+    }
+    if (el.type === 'symbol') {
+      const sz = el.size || 24;
+      return { left: el.x * S.scale, top: (el.y - sz * 0.82) * S.scale,
+             width: sz * S.scale, height: sz * S.scale };
+    }
+    return { left: el.x * S.scale, top: el.y * S.scale,
+             width: (el.width||150) * S.scale, height: (el.height||75) * S.scale };
+  }
+
+  function renderBoxes() {
+    overlayEl.querySelectorAll('.el-box').forEach(b => b.remove());
+    S.elements.filter(el => el.page === S.currentPage).forEach(el => {
+      const g = boxGeom(el);
+      const box = document.createElement('div');
+      box.className = `el-box ${el.type==='text'?'tb':el.type==='symbol'?'symb':'sb'}${el.id===S.selectedId?' sel':''}`;
+      box.dataset.id = el.id;
+      box.style.cssText = `left:${g.left}px;top:${g.top}px;width:${g.width}px;height:${g.height}px`;
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'box-toolbar';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'box-btn box-btn-edit'; editBtn.title = 'Edit'; editBtn.textContent = '✎';
+      editBtn.addEventListener('mousedown', e => e.stopPropagation());
+      editBtn.addEventListener('click', e => { e.stopPropagation(); selectElement(el.id); switchToElementsTab(); });
+      toolbar.appendChild(editBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'box-btn box-btn-del'; delBtn.title = 'Delete'; delBtn.textContent = '✕';
+      delBtn.addEventListener('mousedown', e => e.stopPropagation());
+      delBtn.addEventListener('click', e => { e.stopPropagation(); deleteElement(el.id); });
+      toolbar.appendChild(delBtn);
+      box.appendChild(toolbar);
+
+      if (el.type === 'signature') {
+        const rh = document.createElement('div');
+        rh.className = 'resize-h';
+        rh.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); startResize(e, el, box); });
+        box.appendChild(rh);
+      }
+
+      box.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('box-btn') || e.target.classList.contains('resize-h')) return;
+        e.preventDefault();
+        startMove(e, el, box);
+      });
+      box.addEventListener('click', e => { e.stopPropagation(); selectElement(el.id); });
+      overlayEl.appendChild(box);
+    });
+  }
+
+  // ── Drag: move ─────────────────────────────────────────────────────────────
+  function startMove(e, el, box) {
+    S.drag = { type:'move', id:el.id, startX:e.clientX, startY:e.clientY,
+               origX:el.x, origY:el.y, elType:el.type, boxEl:box };
+  }
+
+  // ── Drag: resize ───────────────────────────────────────────────────────────
+  function startResize(e, el, box) {
+    const aspectRatio = (el.width||150) / (el.height||75);
+    S.drag = { type:'resize', id:el.id, startX:e.clientX, startY:e.clientY,
+               origW:el.width||150, origH:el.height||75, aspectRatio, elType:el.type, boxEl:box };
+  }
+
+  document.addEventListener('mousemove', e => {
+    if (!S.drag) return;
+    const dx = e.clientX - S.drag.startX, dy = e.clientY - S.drag.startY;
+    const dxPt = dx / S.scale, dyPt = dy / S.scale;
+    const box = S.drag.boxEl;
+    const el = S.elements.find(x => x.id === S.drag.id);
+    if (!el) return;
+    if (S.drag.type === 'move') {
+      const g = boxGeom(el);
+      box.style.left = (g.left + dx) + 'px';
+      box.style.top  = (g.top  + dy) + 'px';
+    } else {
+      const diagonal = Math.sqrt(dxPt * dxPt + dyPt * dyPt) * Math.sign(dxPt + dyPt);
+      const newW = Math.max(20, S.drag.origW + diagonal);
+      const newH = Math.max(10, newW / S.drag.aspectRatio);
+      box.style.width  = newW * S.scale + 'px';
+      box.style.height = newH * S.scale + 'px';
+    }
+  });
+
+  document.addEventListener('mouseup', async e => {
+    if (!S.drag) return;
+    const drag = S.drag; S.drag = null;
+    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    const dxPt = dx / S.scale, dyPt = dy / S.scale;
+    let updates = {};
+    if (drag.type === 'move') {
+      updates = { x: drag.origX + dxPt, y: drag.origY + dyPt };
+    } else {
+      const diagonal = Math.sqrt(dxPt * dxPt + dyPt * dyPt) * Math.sign(dxPt + dyPt);
+      const newW = Math.max(20, drag.origW + diagonal);
+      const newH = Math.max(10, newW / drag.aspectRatio);
+      updates = { width: newW, height: newH };
+    }
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    const el = S.elements.find(x => x.id === drag.id);
+    if (el) Object.assign(el, updates);
+    await commitUpdate(drag.id, updates);
+  });
+
+  // ── Select element ─────────────────────────────────────────────────────────
+  function selectElement(id) {
+    S.selectedId = id;
+    renderBoxes();
+    renderElementList();
+    const item = elList.querySelector(`[data-id="${id}"]`);
+    if (item) item.scrollIntoView({ block:'nearest' });
+  }
+
+  function deselectAll() {
+    S.selectedId = null;
+    renderBoxes();
+    renderElementList();
+  }
+
+  // ── Elements list ──────────────────────────────────────────────────────────
+  function renderElementList() {
+    elBadge.textContent = S.elements.length;
+    if (!S.elements.length) { elList.innerHTML = '<p class="el-empty">No elements added yet</p>'; return; }
+    elList.innerHTML = '';
+    S.elements.forEach(el => {
+      const isSel = el.id === S.selectedId;
+      const item = document.createElement('div');
+      item.className = `el-item${isSel?' sel':''}`;
+      item.dataset.id = el.id;
+
+      let label, icon, iconClass;
+      if (el.type === 'text') {
+        label = el.text.length > 28 ? el.text.slice(0,28)+'…' : el.text;
+        icon = 'T'; iconClass = 'el-icon-t';
+      } else if (el.type === 'symbol') {
+        label = `${el.symbol === 'tick' ? 'Tick' : 'Cross'} (${Math.round(el.size||24)}pt)`;
+        icon = el.symbol === 'tick' ? '✓' : '✕'; iconClass = 'el-icon-sym';
+      } else {
+        label = `Signature ${Math.round(el.width||150)}×${Math.round(el.height||75)}`;
+        icon = '✎'; iconClass = 'el-icon-s';
+      }
+
+      item.innerHTML = `
+        <div class="el-item-hdr">
+          <div class="el-icon ${iconClass}">${icon}</div>
+          <span class="el-lbl">${label}</span>
+          <span class="el-pg">p${el.page}</span>
+          <button class="el-del" title="Delete">✕</button>
+        </div>
+        <div class="el-form">${buildEditForm(el)}</div>`;
+
+      item.querySelector('.el-item-hdr').addEventListener('click', e => {
+        if (e.target.classList.contains('el-del')) return;
+        if (isSel) deselectAll();
+        else { selectElement(el.id); if (el.page !== S.currentPage) { S.currentPage = el.page; loadPreview().then(updatePageNav); } }
+      });
+      item.querySelector('.el-del').addEventListener('click', e => { e.stopPropagation(); deleteElement(el.id); });
+
+      if (isSel) {
+        const form = item.querySelector('.el-form');
+        form.querySelector('.btn-apply').addEventListener('click', () => applyEdit(el.id, form));
+        const cp = form.querySelector('.edit-cp');
+        const ch = form.querySelector('.edit-ch');
+        if (cp && ch) { cp.addEventListener('input', () => ch.value = cp.value); ch.addEventListener('input', () => { if(/^#[0-9a-fA-F]{6}$/.test(ch.value)) cp.value = ch.value; }); }
+        const wInput = form.querySelector('.edit-w');
+        const hInput = form.querySelector('.edit-h');
+        if (wInput && hInput) {
+          const aspect = parseFloat(wInput.dataset.aspect);
+          wInput.addEventListener('input', () => { hInput.value = Math.round(parseFloat(wInput.value) / aspect); });
+          hInput.addEventListener('input', () => { wInput.value = Math.round(parseFloat(hInput.value) * aspect); });
+        }
+      }
+      elList.appendChild(item);
+    });
+  }
+
+  function buildEditForm(el) {
+    if (el.type === 'text') {
+      return `
+        <label class="fl">Text</label>
+        <textarea rows="2" class="edit-text">${el.text}</textarea>
+        <div class="row2" style="margin-top:7px">
+          <div><label class="fl">Size</label><input type="number" class="edit-fs" value="${el.font_size||14}" min="6" max="96"/></div>
+          <div><label class="fl">Font</label>
+            <select class="edit-fn">
+              ${['Helvetica','Helvetica-Bold','Times-Roman','Times-Bold','Courier'].map(f=>`<option${f===el.font_name?' selected':''}>${f}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <label class="fl">Color</label>
+        <div class="color-row"><input type="color" class="edit-cp" value="${el.font_color||'#000000'}"/><input type="text" class="edit-ch" value="${el.font_color||'#000000'}"/></div>
+        <div class="row2" style="margin-top:7px">
+          <div><label class="fl">X (pt)</label><input type="number" class="edit-x" value="${Math.round(el.x)}"/></div>
+          <div><label class="fl">Y (pt)</label><input type="number" class="edit-y" value="${Math.round(el.y)}"/></div>
+        </div>
+        <div class="edit-btns"><button class="btn btn-primary btn-apply">Apply</button><button class="btn btn-ghost btn-cancel" onclick="deselectAll()">Cancel</button></div>`;
+    }
+    if (el.type === 'symbol') {
+      return `
+        <div class="row2">
+          <div><label class="fl">Size (pt)</label><input type="number" class="edit-sz" value="${Math.round(el.size||24)}" min="10" max="96"/></div>
+          <div><label class="fl">Color</label><input type="color" class="edit-sc" value="${el.color||'#000000'}"/></div>
+        </div>
+        <div class="row2" style="margin-top:7px">
+          <div><label class="fl">X (pt)</label><input type="number" class="edit-x" value="${Math.round(el.x)}"/></div>
+          <div><label class="fl">Y (pt)</label><input type="number" class="edit-y" value="${Math.round(el.y)}"/></div>
+        </div>
+        <div class="edit-btns"><button class="btn btn-primary btn-apply">Apply</button><button class="btn btn-ghost btn-cancel" onclick="deselectAll()">Cancel</button></div>`;
+    }
+    const aspectRatio = (el.width||150) / (el.height||75);
+    return `
+      <div class="row2">
+        <div><label class="fl">Width (pt)</label><input type="number" class="edit-w" value="${Math.round(el.width||150)}" min="10" max="800" data-aspect="${aspectRatio.toFixed(4)}"/></div>
+        <div><label class="fl">Height (pt)</label><input type="number" class="edit-h" value="${Math.round(el.height||75)}" min="5" max="600" data-aspect="${aspectRatio.toFixed(4)}"/></div>
+      </div>
+      <div class="row2" style="margin-top:7px">
+        <div><label class="fl">X (pt)</label><input type="number" class="edit-x" value="${Math.round(el.x)}"/></div>
+        <div><label class="fl">Y (pt)</label><input type="number" class="edit-y" value="${Math.round(el.y)}"/></div>
+      </div>
+      <div class="edit-btns"><button class="btn btn-primary btn-apply">Apply</button><button class="btn btn-ghost btn-cancel" onclick="deselectAll()">Cancel</button></div>`;
+  }
+
+  async function applyEdit(id, form) {
+    const el = S.elements.find(x => x.id === id);
+    if (!el) return;
+    let updates = {};
+    if (el.type === 'text') {
+      updates = {
+        text:       form.querySelector('.edit-text').value.trim() || el.text,
+        font_size:  parseFloat(form.querySelector('.edit-fs').value) || el.font_size,
+        font_name:  form.querySelector('.edit-fn').value,
+        font_color: form.querySelector('.edit-ch').value,
+        x: parseFloat(form.querySelector('.edit-x').value),
+        y: parseFloat(form.querySelector('.edit-y').value),
+      };
+    } else if (el.type === 'symbol') {
+      updates = {
+        size:  parseFloat(form.querySelector('.edit-sz').value),
+        color: form.querySelector('.edit-sc').value,
+        x: parseFloat(form.querySelector('.edit-x').value),
+        y: parseFloat(form.querySelector('.edit-y').value),
+      };
+    } else {
+      updates = {
+        width:  parseFloat(form.querySelector('.edit-w').value),
+        height: parseFloat(form.querySelector('.edit-h').value),
+        x: parseFloat(form.querySelector('.edit-x').value),
+        y: parseFloat(form.querySelector('.edit-y').value),
+      };
+    }
+    Object.assign(el, updates);
+    renderElementList();
+    await commitUpdate(id, updates);
+  }
+
+  // ── API helpers ────────────────────────────────────────────────────────────
+  async function commitUpdate(id, updates) {
+    showLoading();
+    try {
+      const res = await fetch(`/update-element/${S.sessionId}/${id}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updates)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await loadPreview();
+    } catch(e) { toast(`Update failed: ${e.message}`, 'error'); hideLoading(); }
+  }
+
+  async function deleteElement(id) {
+    showLoading();
+    try {
+      const res = await fetch(`/delete-element/${S.sessionId}/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
+      S.elements = S.elements.filter(x => x.id !== id);
+      if (S.selectedId === id) S.selectedId = null;
+      renderElementList();
+      await loadPreview();
+      toast('Element deleted', 'success');
+    } catch(e) { toast(`Delete failed: ${e.message}`, 'error'); hideLoading(); }
+  }
+
+  // ── Signature image ────────────────────────────────────────────────────────
+  btnSigBrowse.addEventListener('click', () => sigUpload.click());
+  sigUpload.addEventListener('change', () => {
+    const f = sigUpload.files[0]; if (!f) return;
+    S.sigFile = f; sigImg.src = URL.createObjectURL(f);
+    sigPreview.style.display = 'flex';
+    btnAddSig.disabled = S.placedX === null;
+  });
+
+  // ── Symbol selection ───────────────────────────────────────────────────────
+  btnSymTick.addEventListener('click', () => {
+    S.selectedSymbol = 'tick';
+    btnSymTick.classList.add('btn-primary');
+    btnSymTick.classList.remove('btn-ghost');
+    btnSymCross.classList.remove('btn-primary');
+    btnSymCross.classList.add('btn-ghost');
+    btnAddSymbol.disabled = S.placedX === null;
+  });
+  btnSymCross.addEventListener('click', () => {
+    S.selectedSymbol = 'cross';
+    btnSymCross.classList.add('btn-primary');
+    btnSymCross.classList.remove('btn-ghost');
+    btnSymTick.classList.remove('btn-primary');
+    btnSymTick.classList.add('btn-ghost');
+    btnAddSymbol.disabled = S.placedX === null;
+  });
+
+  // ── Add Text ───────────────────────────────────────────────────────────────
+  btnAddText.addEventListener('click', async () => {
+    const txt = textContent.value.trim();
+    if (!txt || S.placedX === null) return;
+    btnAddText.disabled = true; btnAddText.innerHTML = '<span class="spinner"></span> Adding…';
+    const form = new FormData();
+    form.append('session_id', S.sessionId); form.append('page_number', S.currentPage);
+    form.append('text', txt); form.append('x', S.placedX); form.append('y', S.placedY);
+    form.append('font_size', $('font-size').value); form.append('font_color', fcHex.value);
+    form.append('font_name', $('font-name').value);
+    try {
+      const res = await fetch('/add-text', { method:'POST', body:form });
+      if (!res.ok) throw new Error(await res.text());
+      const el = await res.json();
+      S.elements.push(el);
+      clearPlaceMarker(); S.placedX = S.placedY = null;
+      renderElementList();
+      await loadPreview();
+      toast('Text added', 'success');
+    } catch(e) { toast(`Error: ${e.message}`, 'error'); }
+    btnAddText.disabled = false; btnAddText.textContent = '+ Add Text';
+  });
+
+  // ── Add Signature ──────────────────────────────────────────────────────────
+  btnAddSig.addEventListener('click', async () => {
+    if (!S.sigFile || S.placedX === null) return;
+    btnAddSig.disabled = true; btnAddSig.innerHTML = '<span class="spinner"></span> Adding…';
+    const form = new FormData();
+    form.append('session_id', S.sessionId); form.append('page_number', S.currentPage);
+    form.append('x', S.placedX); form.append('y', S.placedY);
+    form.append('width', $('sig-width').value); form.append('height', $('sig-height').value);
+    form.append('image', S.sigFile);
+    try {
+      const res = await fetch('/add-signature', { method:'POST', body:form });
+      if (!res.ok) throw new Error(await res.text());
+      const el = await res.json();
+      S.elements.push(el);
+      clearPlaceMarker(); S.placedX = S.placedY = null;
+      renderElementList();
+      await loadPreview();
+      toast('Signature added', 'success');
+    } catch(e) { toast(`Error: ${e.message}`, 'error'); }
+    btnAddSig.disabled = false; btnAddSig.textContent = '+ Add Signature';
+  });
+
+  // ── Add Symbol ─────────────────────────────────────────────────────────────
+  btnAddSymbol.addEventListener('click', async () => {
+    if (!S.selectedSymbol || S.placedX === null) return;
+    btnAddSymbol.disabled = true; btnAddSymbol.innerHTML = '<span class="spinner"></span> Adding…';
+    const form = new FormData();
+    form.append('session_id', S.sessionId); form.append('page_number', S.currentPage);
+    form.append('symbol', S.selectedSymbol);
+    form.append('x', S.placedX); form.append('y', S.placedY);
+    form.append('size', $('sym-size').value);
+    form.append('color', $('sym-color').value);
+    try {
+      const res = await fetch('/add-symbol', { method:'POST', body:form });
+      if (!res.ok) throw new Error(await res.text());
+      const el = await res.json();
+      S.elements.push(el);
+      clearPlaceMarker(); S.placedX = S.placedY = null;
+      renderElementList();
+      await loadPreview();
+      toast('Symbol added', 'success');
+    } catch(e) { toast(`Error: ${e.message}`, 'error'); }
+    btnAddSymbol.disabled = false; btnAddSymbol.textContent = '+ Add Symbol';
+  });
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  btnDownload.addEventListener('click', () => {
+    if (!S.sessionId) return;
+    const a = document.createElement('a');
+    a.href = `/download/${S.sessionId}`;
+    a.download = S.filename || 'document.pdf';
+    a.click();
+  });
+</script>
+</body>
+</html>
